@@ -1,0 +1,55 @@
+name: HTTPS Readback
+description: Validate a fixed HTTPS deployment target and record status/hash/size evidence
+author: JamPeter
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  base-url:
+    description: Fixed HTTPS base URL
+    required: true
+  target:
+    description: Logical target such as apps/my-app
+    required: true
+  expectation:
+    description: present or absent
+    required: true
+  allowed-roots:
+    description: Space-separated allowlisted roots
+    required: false
+    default: "apps projects"
+  timeout:
+    description: HTTP timeout in seconds
+    required: false
+    default: "30"
+  max-bytes:
+    description: Maximum response body bytes
+    required: false
+    default: "8388608"
+
+outputs:
+  http-code:
+    value: ${{ steps.readback.outputs.http_code }}
+  body-sha256:
+    value: ${{ steps.readback.outputs.body_sha256 }}
+  body-bytes:
+    value: ${{ steps.readback.outputs.body_bytes }}
+
+runs:
+  using: composite
+  steps:
+    - id: readback
+      shell: bash
+      env:
+        BASE_URL: ${{ inputs.base-url }}
+        TARGET: ${{ inputs.target }}
+        EXPECTATION: ${{ inputs.expectation }}
+        ROOTS: ${{ inputs.allowed-roots }}
+        TIMEOUT: ${{ inputs.timeout }}
+        MAX_BYTES: ${{ inputs.max-bytes }}
+      run: |
+        set -euo pipefail
+        args=()
+        for root in $ROOTS; do args+=(--allowed-root "$root"); done
+        python3 "${{ github.action_path }}/scripts/readback.py"           --base-url "$BASE_URL"           --target "$TARGET"           --expectation "$EXPECTATION"           --timeout "$TIMEOUT"           --max-bytes "$MAX_BYTES"           "${args[@]}"
