@@ -1,0 +1,44 @@
+name: HTTPS Readback
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  readback:
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, '/https-readback ')
+    runs-on: ubuntu-latest
+    env:
+      BASE_URL: ${{ vars.READBACK_BASE_URL }}
+      ROOTS: ${{ vars.READBACK_ALLOWED_ROOTS || 'apps projects' }}
+      COMMENT: ${{ github.event.comment.body }}
+      ISSUE: ${{ github.event.issue.number }}
+      SOURCE_REPO: ${{ github.repository }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          command="${COMMENT#/https-readback }"
+          read -r expectation target extra <<< "$command"
+          test -z "${extra:-}" || exit 2
+          args=()
+          for root in $ROOTS; do args+=(--allowed-root "$root"); done
+          python3 scripts/readback.py             --base-url "$BASE_URL"             --target "$target"             --expectation "$expectation"             "${args[@]}" | tee result.txt
+      - name: Record result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "$ISSUE" --repo "$SOURCE_REPO" --body "HTTPS_READBACK=${{ job.status }}
+          RUN_ID=${{ github.run_id }}
+          SECRET_EXPOSED=NO"
